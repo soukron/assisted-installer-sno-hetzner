@@ -1,0 +1,206 @@
+#!/bin/bash
+
+#
+# PREPARATION
+#
+rm -fr *.json *.txt *.out
+
+#
+# INITIALIZE CONFIGURATION FOR $1
+#
+source $1/config
+export PULL_SECRET=$( cat ./$1/pull-secret.txt | jq -R . )
+export SSH_AUTHORIZED_KEY=./$1/ssh-authorized-key.txt
+export SSH_AUTHORIZED_KEY_PUB=$( cat ./$1/ssh-authorized-key-pub.txt )
+export API_TOKEN=$( \
+  curl \
+  --silent \
+  --header "Accept: application/json" \
+  --header "Content-Type: application/x-www-form-urlencoded" \
+  --data-urlencode "grant_type=refresh_token" \
+  --data-urlencode "client_id=cloud-services" \
+  --data-urlencode "refresh_token=${OFFLINE_TOKEN}" \
+  "https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token" \
+  | jq --raw-output ".access_token" \
+)
+echo -e "API_TOKEN=$API_TOKEN"
+
+#
+# CREATE CLUSTER
+#
+# generate cluster.json
+function create_cluster() {
+if [ ! -f cluster.json ]; then 
+  cat << EOF > cluster.json
+{
+  "name": "$NAME",
+  "openshift_version": "$VERSION",
+  "high_availability_mode": "None",
+  "base_dns_domain": "$DOMAIN",
+  "pull_secret": $PULL_SECRET
+}
+EOF
+fi
+
+export CLUSTER_ID=$(
+  curl -s -X POST "https://api.openshift.com/api/assisted-install/v2/clusters" \
+    -d @./cluster.json \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $API_TOKEN" \
+  | jq -r '.service_networks[0].cluster_id'
+)
+
+echo -e "CLUSTER_ID=$CLUSTER_ID"
+sleep 5
+}
+
+#
+# CREATE INFRA ENV
+#
+# generate infra-env.json
+function create_infra_env() {
+cat << EOF > infra-env.json
+{
+ "name": "$NAME-infra-env",
+ "image_type": "minimal-iso",
+ "cluster_id": "$CLUSTER_ID",
+ "pull_secret": $PULL_SECRET,
+ "ssh_authorized_key": "$SSH_AUTHORIZED_KEY_PUB"
+}
+EOF
+
+export INFRA_ENV_ID=$(
+  curl -s -X POST "https://api.openshift.com/api/assisted-install/v2/infra-envs" \
+    -d @./infra-env.json \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $API_TOKEN" \
+  | jq -r '.id'
+)
+
+sleep 5
+}
+
+#
+# DOWNLOAD IPXE SCRIPT
+#
+function download_ipxe() {
+curl -s -X GET "https://api.openshift.com/api/assisted-install/v2/infra-envs/$INFRA_ENV_ID/downloads/files?file_name=ipxe-script" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $API_TOKEN" \
+  -o ipxe-script.txt
+
+echo -e "\niPXE script downloaded..."
+}
+
+#
+# ENABLE RESCUE SYSTEM
+#
+function enable_rescue() {
+PARAMS="os=linux&authorized_key%5B%5D=${SSH_AUTHORIZED_KEY_FINGERPRINT//:/%3A}"
+
+curl -s -X POST "https://robot-ws.your-server.de/boot/$SERVER/rescue?$PARAMS" \
+  -u "$HETZNER_CREDS" \
+| jq . > rescue.json
+
+echo -e "\nRescue mode enable..."
+sleep 5
+}
+
+#
+# COPY IPXE SCRIPT
+#
+function boot_installer() {
+scp -i $SSH_AUTHORIZED_KEY \
+  -o "StrictHostKeyChecking=no" \
+  ipxe-script.txt hetzner-sno-provision-host.sh \
+  root@$SERVER_HOSTNAME:/tmp/ &> scp.out
+
+echo -e "\niPXE and provisioning scripts copied to remote server. Executing script..."
+
+ssh -i $SSH_AUTHORIZED_KEY \
+  -o "StrictHostKeyChecking=no" \
+  root@$SERVER_HOSTNAME \
+  "cd /tmp && bash ./hetzner-sno-provision-host.sh file:///tmp/ipxe-script.txt" \
+  &> ipxe.out
+}
+
+#
+# REBOOT THE HOST
+#
+function reboot() {
+PARAMS="type=hw"
+
+curl -s -X POST "https://robot-ws.your-server.de/reset/$SERVER?$PARAMS" \
+  -u '#ws+vXiRqAUJ:WaRhZj6t9Ln5Yn' \
+| jq . > reboot.json
+
+echo -e "\nServer rebooted..."
+}
+
+#
+# START INSTALLATION
+#
+function install() {
+curl -s -X POST "https://api.openshift.com/api/assisted-install/v2/clusters/$CLUSTER_ID/actions/install" \
+  -H "Authorization: Bearer $API_TOKEN" \
+| jq . > install.json
+
+echo -e "\nStarting installation..."
+}
+
+#
+# WAIT FOR SSH
+#
+function wait_for_ssh() {
+  echo -ne "\nWaiting for SSH to be reachable again..."
+
+  while true; do
+    ssh -i $SSH_AUTHORIZED_KEY \
+      -o "ConnectTimeout=5" \
+      -o "StrictHostKeyChecking=no" \
+      root@$SERVER_HOSTNAME \
+      exit 2>/dev/null
+
+    if [ $? -eq 0 ]; then
+      echo " Finished!"
+      return
+    fi
+
+    echo -n .
+    sleep 5
+  done
+}
+
+#
+# WAIT FOR READY TO INSTALL
+#
+function wait_for_validations() {
+echo -ne "\nWaiting for host validations..."
+while true; do
+  # Verifica si todos los elementos en el JSON tienen "status" igual a "success"
+  if curl -s -X GET "https://api.openshift.com/api/assisted-install/v2/clusters/$CLUSTER_ID/" \
+    -H "Authorization: Bearer $API_TOKEN" \
+  | jq -e '.validations_info | fromjson | ."hosts-data" | map(select(.status != "success")) | length == 0' &>/dev/null
+  then
+    echo " Finished!"
+    return
+  else
+    echo -n .
+    sleep 5
+  fi
+done
+}
+
+
+#
+# MAIN
+#
+create_cluster
+create_infra_env
+download_ipxe
+enable_rescue
+reboot
+wait_for_ssh
+boot_installer
+wait_for_validations
+install
