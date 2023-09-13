@@ -1,5 +1,7 @@
 *.txt
+!pull-secret.txt
+!ssh-authorized-key.txt
+!ssh-authorized-key-pub.txt
 *.json
 *.out
 ocp4/*
-
