@@ -8,6 +8,10 @@ rm -fr *.json *.txt *.out
 #
 # INITIALIZE CONFIGURATION FOR $1
 #
+if [ ! -f $1/config ]; then
+  echo "ERROR: no $1/config file found!"
+  exit
+fi
 source $1/config
 export PULL_SECRET=$( cat ./$1/pull-secret.txt | jq -R . )
 export SSH_AUTHORIZED_KEY=./$1/ssh-authorized-key.txt
