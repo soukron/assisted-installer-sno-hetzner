@@ -1,4 +1,5 @@
 #!/bin/bash
+# credit: https://github.com/palonsoro/hetzner-sno-provision-host
 
 # WARNING: This script assumes that
 # - You have wiped the main hard drives as required
