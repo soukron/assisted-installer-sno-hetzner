@@ -25,7 +25,7 @@ Requirements:
 What it does:
 - Creates the required items using Assisted Installer API
 - Enables rescue mode and reboots the server using Hetzner API
-- Copies the files to the server and reboots the server using [Pablo Alonso's](https://github.com/palonsoro/hetzner-sno-provision-host) script.
+- Copies the files to the server and reboots the server using a modified version of [Pablo Alonso's](https://github.com/palonsoro/hetzner-sno-provision-host) script.
 - Starts the SNO installation using Assisted Installer API
 
 What it doesn't do:
