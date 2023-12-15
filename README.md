@@ -16,6 +16,12 @@ your own data and invoke the script with the name of the directory:
 ./new-cluster sno
 ```
 
+Requirements:
+- [Assisted Installer Token](https://access.redhat.com/documentation/en-us/assisted_installer_for_openshift_container_platform/2023/html/assisted_installer_for_openshift_container_platform/installing-with-api#installing-the-openshift-cluster-manager-cli_installing-with-api).
+- Hetzner webservice credentials. Login in Robot, click on the user icon in the upper right corner and then on "Settings" and "Webservice and app settings".
+- Server ID.
+- Server Hostname/IP address.
+
 What it does:
 - Creates the required items using Assisted Installer API
 - Enables rescue mode and reboots the server using Hetzner API
