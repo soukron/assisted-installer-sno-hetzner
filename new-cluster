@@ -135,7 +135,7 @@ function reboot() {
 PARAMS="type=hw"
 
 curl -s -X POST "https://robot-ws.your-server.de/reset/$SERVER?$PARAMS" \
-  -u '#ws+vXiRqAUJ:WaRhZj6t9Ln5Yn' \
+  -u "$HETZNER_CREDS" \
 | jq . > reboot.json
 
 echo -e "\nServer rebooted..."
