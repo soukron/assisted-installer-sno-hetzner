@@ -9,4 +9,5 @@ HETZNER_CREDS=#ws+vXiXYZUJ:WaRABC6t9Ln5Yn # notsecret
 SERVER=123456 # notsecret
 SERVER_HOSTNAME=your-hostname.your-server.de # notsecret
 
+# Make sure that your SSH public key is uploaded to Hetzner via the Web interface, because the installer will match the following fingerprint and add it to the server automatically.
 SSH_AUTHORIZED_KEY_FINGERPRINT=9e:4c:ab:cd:ef:b5:a4:ab:cd:ef:e4:ab:cd:ef:6e:d3 # notsecret
