@@ -39,7 +39,7 @@ if [ ! -f cluster.json ]; then
 {
   "name": "$NAME",
   "openshift_version": "$VERSION",
-  "high_availability_mode": "None",
+  "control_plane_count": 1,
   "base_dns_domain": "$DOMAIN",
   "pull_secret": $PULL_SECRET
 }
